@@ -13,9 +13,11 @@ public class CodeFixRunner
         ImmutableArray<DiagnosticAnalyzer> analyzers,
         ImmutableArray<CodeFixProvider> fixers,
         bool verify,
-        TextWriter? output = null)
+        TextWriter? output = null,
+        string[]? diagnosticIds = null)
     {
         output ??= Console.Out;
+        var diagnosticIdFilter = diagnosticIds?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         
         var modifiedFiles = new List<string>();
         var unfixable = new List<string>();
@@ -45,6 +47,14 @@ public class CodeFixRunner
                         d.Severity != DiagnosticSeverity.Hidden)
             .ToList();
 
+        // Apply diagnostic ID filter if specified
+        if (diagnosticIdFilter != null && diagnosticIdFilter.Count > 0)
+        {
+            fixableDiagnostics = fixableDiagnostics
+                .Where(d => diagnosticIdFilter.Contains(d.Id))
+                .ToList();
+        }
+
         totalDiagnostics = fixableDiagnostics.Count;
         await output.WriteLineAsync($"  Found {totalDiagnostics} diagnostic(s)");
 
@@ -70,7 +80,6 @@ public class CodeFixRunner
 
         // Apply fixes
         var solution = project.Solution;
-        var workspace = solution.Workspace;
 
         foreach (var diagnostic in fixableDiagnostics)
         {

@@ -20,7 +20,8 @@ public class CodeFormatter
         string baseDirectory,
         bool verify,
         bool verbose,
-        TextWriter? output = null)
+        TextWriter? output = null,
+        string[]? diagnosticIds = null)
     {
         output ??= Console.Out;
         var parsedArgs = CSharpCommandLineParser.Default.Parse(
@@ -44,11 +45,25 @@ public class CodeFormatter
             await output.WriteLineAsync($"  Found {analyzerPaths.Count} analyzer reference(s)");
         }
 
-        // Load analyzers and fixers
-        var (analyzers, fixers) = AnalyzerLoader.LoadAnalyzers(analyzerPaths);
+        // Load analyzers and fixers (filtered by diagnostic IDs if specified)
+        var diagnosticIdFilter = diagnosticIds?.Length > 0 
+            ? diagnosticIds.ToHashSet(StringComparer.OrdinalIgnoreCase) 
+            : null;
+        var (analyzers, fixers) = AnalyzerLoader.LoadAnalyzers(analyzerPaths, diagnosticIdFilter);
         if (verbose)
         {
             await output.WriteLineAsync($"  Loaded {analyzers.Length} analyzer(s), {fixers.Length} fixer(s)");
+        }
+
+        // Warn if filtered diagnostics have no fixers
+        if (diagnosticIdFilter != null && diagnosticIdFilter.Count > 0)
+        {
+            var fixableIds = fixers.SelectMany(f => f.FixableDiagnosticIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var unfixableIds = diagnosticIdFilter.Where(id => !fixableIds.Contains(id)).ToList();
+            foreach (var id in unfixableIds)
+            {
+                await output.WriteLineAsync($"  Warning: No code fixer available for {id}");
+            }
         }
 
         // Create workspace
@@ -108,7 +123,8 @@ public class CodeFormatter
             analyzers,
             fixers,
             verify,
-            output);
+            output,
+            diagnosticIds);
 
         return result;
     }

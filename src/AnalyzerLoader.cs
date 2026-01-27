@@ -1,8 +1,5 @@
 using System.Collections.Immutable;
-using System.Composition.Hosting;
 using System.Reflection;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
 
@@ -11,7 +8,8 @@ namespace FormatLog;
 public class AnalyzerLoader
 {
     public static (ImmutableArray<DiagnosticAnalyzer> Analyzers, ImmutableArray<CodeFixProvider> Fixers) LoadAnalyzers(
-        IEnumerable<string> analyzerPaths)
+        IEnumerable<string> analyzerPaths,
+        HashSet<string>? diagnosticIdFilter = null)
     {
         var analyzers = new List<DiagnosticAnalyzer>();
         var fixers = new List<CodeFixProvider>();
@@ -37,6 +35,17 @@ public class AnalyzerLoader
                         try
                         {
                             var analyzer = (DiagnosticAnalyzer)Activator.CreateInstance(type)!;
+                            
+                            // If filtering by diagnostic ID, only include analyzers that produce those IDs
+                            if (diagnosticIdFilter != null && diagnosticIdFilter.Count > 0)
+                            {
+                                var supportedIds = analyzer.SupportedDiagnostics.Select(d => d.Id);
+                                if (!supportedIds.Any(id => diagnosticIdFilter.Contains(id)))
+                                {
+                                    continue; // Skip this analyzer
+                                }
+                            }
+                            
                             analyzers.Add(analyzer);
                         }
                         catch
@@ -50,6 +59,16 @@ public class AnalyzerLoader
                         try
                         {
                             var fixer = (CodeFixProvider)Activator.CreateInstance(type)!;
+                            
+                            // If filtering by diagnostic ID, only include fixers for those IDs
+                            if (diagnosticIdFilter != null && diagnosticIdFilter.Count > 0)
+                            {
+                                if (!fixer.FixableDiagnosticIds.Any(id => diagnosticIdFilter.Contains(id)))
+                                {
+                                    continue; // Skip this fixer
+                                }
+                            }
+                            
                             fixers.Add(fixer);
                         }
                         catch
