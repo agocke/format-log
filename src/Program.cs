@@ -6,6 +6,8 @@ var verifyOption = new Option<bool>("--verify-no-changes") { Description = "Chec
 var verboseOption = new Option<bool>("--verbose") { Description = "Enable verbose output" };
 var diagnosticsOption = new Option<string[]>("--diagnostics", "-d") { Description = "Filter to specific diagnostic IDs (e.g., -d IDE0001 -d IDE0002)" };
 var projectOption = new Option<string>("--project", "-p") { Description = "Filter to a specific project name (substring match)" };
+var analyzerOption = new Option<string[]>("--analyzer", "-a") { Description = "Additional analyzer assemblies to load (e.g., -a path/to/analyzer.dll)" };
+var fixTitleOption = new Option<string>("--fix-title", "-f") { Description = "Preferred fix title prefix (e.g., -f 'Use explicit type')" };
 
 var rootCommand = new RootCommand("Apply Roslyn code fixes using compilation info from an MSBuild binlog")
 {
@@ -13,7 +15,9 @@ var rootCommand = new RootCommand("Apply Roslyn code fixes using compilation inf
     verifyOption,
     verboseOption,
     diagnosticsOption,
-    projectOption
+    projectOption,
+    analyzerOption,
+    fixTitleOption
 };
 
 rootCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -23,6 +27,8 @@ rootCommand.SetAction(async (parseResult, cancellationToken) =>
     var verbose = parseResult.GetValue(verboseOption);
     var diagnosticIds = parseResult.GetValue(diagnosticsOption) ?? [];
     var projectFilter = parseResult.GetValue(projectOption);
+    var additionalAnalyzers = parseResult.GetValue(analyzerOption) ?? [];
+    var fixTitle = parseResult.GetValue(fixTitleOption);
 
     if (!binlog.Exists)
     {
@@ -59,6 +65,10 @@ rootCommand.SetAction(async (parseResult, cancellationToken) =>
         {
             Console.WriteLine($"Filtering to diagnostics: {string.Join(", ", diagnosticIds)}");
         }
+        if (!string.IsNullOrEmpty(fixTitle))
+        {
+            Console.WriteLine($"Preferred fix: {fixTitle}");
+        }
     }
 
     var hasChanges = false;
@@ -72,7 +82,9 @@ rootCommand.SetAction(async (parseResult, cancellationToken) =>
             invocation.ProjectDirectory,
             verify,
             verbose,
-            diagnosticIds: diagnosticIds);
+            diagnosticIds: diagnosticIds,
+            additionalAnalyzerPaths: additionalAnalyzers,
+            preferredFixTitle: fixTitle);
         hasChanges |= result.FixesApplied > 0;
     }
 

@@ -21,7 +21,9 @@ public class CodeFormatter
         bool verify,
         bool verbose,
         TextWriter? output = null,
-        string[]? diagnosticIds = null)
+        string[]? diagnosticIds = null,
+        string[]? additionalAnalyzerPaths = null,
+        string? preferredFixTitle = null)
     {
         output ??= Console.Out;
         var parsedArgs = CSharpCommandLineParser.Default.Parse(
@@ -40,9 +42,21 @@ public class CodeFormatter
 
         // Extract analyzer paths from command line
         var analyzerPaths = AnalyzerLoader.ExtractAnalyzerPaths(commandLineArgs).ToList();
+        
+        // Add any additional analyzer paths
+        if (additionalAnalyzerPaths != null)
+        {
+            analyzerPaths.AddRange(additionalAnalyzerPaths);
+        }
+        
         if (verbose)
         {
             await output.WriteLineAsync($"  Found {analyzerPaths.Count} analyzer reference(s)");
+            // Show analyzerconfig files
+            foreach (var arg in commandLineArgs.Where(a => a.Contains("analyzerconfig", StringComparison.OrdinalIgnoreCase)))
+            {
+                await output.WriteLineAsync($"    AnalyzerConfig: {arg}");
+            }
         }
 
         // Load analyzers and fixers (filtered by diagnostic IDs if specified)
@@ -88,6 +102,20 @@ public class CodeFormatter
 
         var solution = workspace.CurrentSolution.AddProject(projectInfo);
 
+        // Add analyzer config files
+        foreach (var configPath in parsedArgs.AnalyzerConfigPaths)
+        {
+            if (File.Exists(configPath))
+            {
+                var docId = DocumentId.CreateNewId(projectId, configPath);
+                solution = solution.AddAnalyzerConfigDocument(
+                    docId,
+                    Path.GetFileName(configPath),
+                    SourceText.From(File.ReadAllText(configPath)),
+                    filePath: configPath);
+            }
+        }
+
         // Add source files
         var sourceFiles = parsedArgs.SourceFiles;
         if (verbose)
@@ -124,7 +152,8 @@ public class CodeFormatter
             fixers,
             verify,
             output,
-            diagnosticIds);
+            diagnosticIds,
+            preferredFixTitle);
 
         return result;
     }
